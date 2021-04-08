@@ -12,16 +12,19 @@ from .base import SVGBase
 from .tspan import TspanParser
 
 class Options:
-    def __init__(self, vspace=80, hspace=800, lanes=1, bits=32, fontsize=14, bigendian=False, fontfamily='sans-serif',
-                 fontweight='normal'):
+    def __init__(self, vspace=80, hspace=800, lanes=1, bits=32, fontsize=14, fontfamily='sans-serif',
+                 fontweight='normal', compact=False, vflip=False, hflip=False):
         self.vspace = vspace if vspace > 19 else 80
-        self.hspace = hspace if hspace > 39 else 800
-        self.lanes = lanes if lanes > 0 else 1
+        self.hspace = hspace if hspace > 39 else 640
+        self.lanes = lanes if lanes > 0 else 2
         self.bits = bits if bits > 4 else 32
         self.fontsize = fontsize if fontsize > 5 else 14
-        self.bigendian = bigendian
         self.fontfamily = fontfamily
         self.fontweight = fontweight
+        self.compact = compact
+        self.vflip = vflip
+        self.hflip = hflip
+
 
 colors = {2: 0, 3: 80, 4: 170, 5: 45, 6: 126, 7: 215}
 
@@ -111,10 +114,11 @@ class BitField(SVGBase):
                     msbm = e["msbm"]
                 else:
                     continue
-
-            bits.add(self.get_text(lsb, x=[step*(self.mod-lsbm - 1)]))
-            if lsbm != msbm:
-                bits.add(self.get_text(msb, x=[step * (self.mod - msbm - 1)]))
+            
+            if not self.opt.compact:
+                bits.add(self.get_text(lsb, x=[step*(self.mod-lsbm - 1)]))
+                if lsbm != msbm:
+                    bits.add(self.get_text(msb, x=[step * (self.mod - msbm - 1)]))
             if e.get('name'):
                 x = step*(self.mod-((msbm+lsbm)/2)-1)
                 for n in self.get_label(e['name'], x, 0):
@@ -167,6 +171,9 @@ class BitField(SVGBase):
     def lane(self, desc):
         x = 4.5
         y = (self.opt.lanes-self.index-1)  * self.opt.vspace + 0.5
+        if self.opt.compact:
+            y = (self.opt.lanes - self.index - 1) * self.opt.vspace / 2 + self.opt.fontsize/2
+            x += 20
         g = self.container.g(transform = "translate({},{})".format(x, y),
                              text_anchor = "middle",
                              font_size = self.opt.fontsize,
@@ -187,6 +194,17 @@ class BitField(SVGBase):
                     max_count = max(max_count, 1)
         return max_count
 
+    def compactLabels(self, desc, opt = Options()):
+        step = self.opt.hspace / self.mod
+        tx = 4.5 + self.opt.compact*20 + step/2
+        g = self.container.g(text_anchor = "middle",
+                        font_size = opt.fontsize,
+                        font_family = self.opt.fontfamily,
+                        font_weight = self.opt.fontweight)
+        for i in range(self.mod):
+            g.add(self.get_text(self.mod - 1 - i, x=tx+step*i, y=self.opt.fontsize))
+        return g
+
     def render(self, desc, opt = Options()):
         self.opt = opt
 
@@ -201,6 +219,9 @@ class BitField(SVGBase):
 
         width = opt.hspace + 9
         height = (opt.vspace + self.extra_attr_space) * opt.lanes + 5
+        if opt.compact:
+            width += 20
+            height = (opt.vspace + self.extra_attr_space) * (opt.lanes + 1)/2 + opt.fontsize
 
         template = svgwrite.Drawing()
         template["width"] = width
@@ -222,11 +243,15 @@ class BitField(SVGBase):
             self.index = i
             template.add(self.lane(desc))
 
+        if opt.compact:
+            template.add(self.compactLabels(desc))
         return template
 
     def renderJson(self, source):
         opt = Options()
         if source.get("config"):
             opt = Options(**source['config'])
+        if source.get("options"):
+            opt = Options(**source['options'])
         if source.get("reg"):
             return self.render(source['reg'], opt)
