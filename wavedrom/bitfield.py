@@ -112,7 +112,7 @@ class BitField(SVGBase):
                 if floor(e["msb"] / self.mod) == self.index:
                     msb = e["msb"]
                     msbm = e["msbm"]
-                else:
+                elif not (lsb > e["lsb"] and msb < e["msb"]):
                     continue
             
             if not self.opt.compact:
